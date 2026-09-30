@@ -1,0 +1,2 @@
+model_type,alpha,n_features,n_training_observations,residual_std,training_mae,training_rmse,test_mae,test_rmse,p10_p90_coverage,p10_p90_average_width,observed_in_range_rate,mean_predicted_probability
+White-box Bayesian-like Ridge regression,10.0,31,16650,13.090607650171645,9.758210962062634,13.078022037214883,12.7433711962363,133.64662695447703,0.7871727119865481,43.891067556883186,0.026663463848186405,0.048948445709235865

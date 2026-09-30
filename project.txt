@@ -1,0 +1,752 @@
+\documentclass[11pt,a4paper]{article}
+
+% -------------------------------------------------
+% Packages
+% -------------------------------------------------
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{siunitx}
+
+\hypersetup{
+colorlinks=true,
+linkcolor=blue,
+citecolor=blue,
+urlcolor=blue
+}
+
+\title{
+\textbf{An Explainable Probabilistic Decision-Support Model\
+for Electric Arc Furnace Process Optimisation}
+}
+
+\author{
+Proof-of-Concept Study
+}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+
+Electric Arc Furnace (EAF) steelmaking requires operators to continuously
+assess the current process state and determine the appropriate next operating
+action. These decisions influence tap temperature, electrical energy
+consumption, process duration, and final steel quality.
+
+This proof-of-concept (POC) investigates an explainable probabilistic
+decision-support approach for EAF operation. Rather than predicting a single
+future process value, the proposed model estimates the probability distribution
+of possible outcomes under different feasible operating actions. Candidate
+actions are then simulated and ranked according to their probability of
+achieving the desired tap condition while considering additional energy and
+process time.
+
+The objective of the POC is therefore not to replace the furnace operator or
+automatically control the EAF, but to provide an interpretable recommendation
+of possible next actions together with the associated uncertainty.
+
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% =================================================
+\section{Introduction}
+% =================================================
+
+Electric Arc Furnaces are highly dynamic thermochemical systems in which
+electrical energy, chemical energy, oxygen injection, carbon injection,
+natural gas, metallic charge, and process timing interact to determine the
+state of the furnace and the final condition of the steel.
+
+During a heat, the operator must make decisions based on incomplete and
+uncertain information. In particular, the final approach to tapping requires
+the operator to determine whether the current process should be maintained,
+intensified, chemically adjusted, or brought toward tap.
+
+A conventional predictive model may estimate a future temperature or energy
+requirement. However, a prediction alone does not directly answer the
+operational question:
+
+\begin{quote}
+\textit{Given the current state of the heat, what should be considered as the
+next operating action?}
+\end{quote}
+
+This POC addresses this problem by combining probabilistic prediction with
+action evaluation and ranking.
+
+% =================================================
+\section{Problem Statement}
+% =================================================
+
+The specific problem addressed in this POC is:
+
+\begin{quote}
+\textbf{
+Given the current state of an EAF heat, identify and rank feasible next
+operating actions according to their probability of achieving the desired tap
+temperature while minimising expected additional energy consumption and
+process time.
+}
+\end{quote}
+
+The POC focuses on the final approach to tap temperature rather than attempting
+to optimise the entire EAF process simultaneously.
+
+The proposed system considers a small action space:
+
+\begin{itemize}
+\item maintain current operation;
+\item increase electrical power;
+\item increase oxygen input;
+\item increase carbon input where applicable;
+\item prepare for tap.
+\end{itemize}
+
+The system does not directly control the furnace. It provides an interpretable
+decision-support output for the operator.
+
+% =================================================
+\section{Research Objective}
+% =================================================
+
+The main objective is to develop a simple probabilistic model capable of
+estimating the likely outcome of alternative EAF operating actions and ranking
+those actions using process-relevant objectives.
+
+The specific objectives are:
+
+\begin{enumerate}
+\item Characterise the current state of an EAF heat using historical
+process data.
+
+\item Predict the distribution of future tap temperature rather than only
+predicting a single value.
+
+\item Evaluate the predicted outcome under different feasible operating
+actions.
+
+\item Quantify the probability of achieving the desired tap condition.
+
+\item Include expected additional energy consumption and process time in
+the action evaluation.
+
+\item Produce an explainable ranking of candidate next actions.
+
+\end{enumerate}
+
+% =================================================
+\section{Dataset}
+% =================================================
+
+The POC uses an EAF production dataset containing approximately 20,813 heats.
+The dataset contains process, energy, gas, oxygen, carbon, temperature,
+charge, timing, and steel chemistry information.
+
+The dataset contains 58 variables, including the heat identifier, process
+measurements, charge information, EAF additions, temperature measurements,
+EAF chemistry and ladle-furnace chemistry.
+
+The primary groups of variables are shown in Table~\ref{tab:featuregroups}.
+
+\begin{table}[H]
+\centering
+\caption{Main groups of variables in the EAF dataset.}
+\label{tab:featuregroups}
+\begin{tabular}{p{4cm}p{9cm}}
+\toprule
+\textbf{Process group} & \textbf{Example variables} \
+\midrule
+Electrical energy &
+energy_mwh, power_on_min, mean_mw, n_power_segments,
+max_tap \
+
+Charge &
+basket_amount, basket_n, charge_t \
+
+Oxygen &
+o2_total, o2_flow_mean, o2_per_t \
+
+Carbon &
+carbon_total, carbon_flow_mean, carbon_per_t \
+
+Gas &
+gas_total, gas_per_t \
+
+Temperature &
+temp_first, temp_tap, n_temp_meas, temp_rise \
+
+Timing &
+heat_start, heat_duration_min, power_off_min \
+
+EAF chemistry &
+eaf_c, eaf_si, eaf_mn, eaf_p, eaf_s, etc. \
+
+LF chemistry &
+lf_c, lf_si, lf_mn, lf_p, lf_s, etc. \
+
+\bottomrule
+\end{tabular}
+\end{table}
+
+% =================================================
+\section{Feature Engineering}
+% =================================================
+
+A major consideration is that the dataset contains both variables that are
+available during the heat and variables that are only known after the heat has
+finished.
+
+Using final heat information as an input to a model intended for real-time
+decision support would result in data leakage.
+
+Therefore, the POC distinguishes between:
+
+\subsection{Current-State Features}
+
+These represent information available to the operator at the decision point.
+
+Examples include:
+
+\begin{itemize}
+\item current or accumulated electrical energy;
+\item elapsed heat time;
+\item current power;
+\item accumulated oxygen;
+\item accumulated carbon;
+\item accumulated gas;
+\item latest available temperature;
+\item charge information;
+\item number of temperature measurements.
+\end{itemize}
+
+\subsection{Outcome Variables}
+
+These represent information that becomes known later in the heat and are
+therefore used as prediction targets rather than real-time inputs.
+
+Examples include:
+
+\begin{itemize}
+\item tap temperature;
+\item final energy consumption;
+\item final heat duration;
+\item final steel chemistry.
+\end{itemize}
+
+% =================================================
+\section{Heat-State Representation}
+% =================================================
+
+Instead of treating each heat as a single static observation, the POC
+conceptually represents a heat as a sequence of decision states.
+
+For a heat $h$, the state at time $t$ is represented by:
+
+\begin{equation}
+S_t =
+[
+T_t,
+E_t,
+P_t,
+O_{2,t},
+C_t,
+G_t,
+\tau_t,
+Q_t
+]
+\end{equation}
+
+where:
+
+\begin{itemize}
+\item $T_t$ is the latest available temperature;
+\item $E_t$ is accumulated electrical energy;
+\item $P_t$ represents electrical power;
+\item $O_{2,t}$ is accumulated oxygen;
+\item $C_t$ is accumulated carbon;
+\item $G_t$ is accumulated gas;
+\item $\tau_t$ is elapsed process time;
+\item $Q_t$ represents relevant charge information.
+\end{itemize}
+
+This state representation allows the model to answer a sequential decision
+question rather than simply performing heat-level prediction.
+
+% =================================================
+\section{Candidate Operating Actions}
+% =================================================
+
+For simplicity, the POC uses a small discrete action space:
+
+\begin{equation}
+\mathcal{A} =
+{
+A_{\mathrm{maintain}},
+A_{\mathrm{power}},
+A_{\mathrm{O_2}},
+A_{\mathrm{carbon}},
+A_{\mathrm{tap}}
+}
+\end{equation}
+
+where each action represents a feasible operational alternative.
+
+The action space is intentionally small so that the output remains
+understandable to an operator.
+
+Future implementations may replace these discrete actions with continuous
+control variables.
+
+% =================================================
+\section{Probabilistic Modelling Methodology}
+% =================================================
+
+The central feature of the proposed approach is that the model predicts a
+distribution of possible outcomes rather than a single deterministic value.
+
+For example, the tap temperature is represented as:
+
+\begin{equation}
+T_{\mathrm{tap}}
+\sim
+p(T_{\mathrm{tap}} \mid S_t,A_t)
+\end{equation}
+
+where $S_t$ represents the current EAF state and $A_t$ represents a candidate
+operating action.
+
+A simple probabilistic regression model may be used for the initial POC.
+
+The model can therefore produce:
+
+\begin{equation}
+T_{\mathrm{tap}}
+\mu_T \pm \sigma_T
+\end{equation}
+
+rather than only:
+
+\begin{equation}
+T_{\mathrm{tap}} = \mu_T
+\end{equation}
+
+This uncertainty is important because EAF operation contains substantial
+process variability.
+
+% =================================================
+\section{Outcome Prediction}
+% =================================================
+
+For each candidate action, the model estimates:
+
+\begin{enumerate}
+\item expected tap temperature;
+\item uncertainty in tap temperature;
+\item probability of achieving the target temperature;
+\item expected additional energy;
+\item expected additional process time.
+\end{enumerate}
+
+The probability of achieving the target condition can be expressed as:
+
+\begin{equation}
+P_{\mathrm{target}}
+P(T_{\min} \leq T_{\mathrm{tap}} \leq T_{\max}
+\mid S_t,A_t)
+\end{equation}
+
+This allows the operator to see both the predicted outcome and the confidence
+associated with that outcome.
+
+% =================================================
+\section{Optimisation Objective}
+% =================================================
+
+The optimisation problem is defined as the selection of the action that
+provides the most favourable trade-off between process success, energy
+consumption and process time.
+
+The action score is defined as:
+
+\begin{equation}
+J(A)
+w_T P_{\mathrm{target}}(A)
+w_E E_{\mathrm{additional}}(A)
+w_t t_{\mathrm{additional}}(A)
+\end{equation}
+
+where:
+
+\begin{itemize}
+\item $P_{\mathrm{target}}$ is the probability of achieving the desired
+tap temperature;
+\item $E_{\mathrm{additional}}$ is expected additional energy;
+\item $t_{\mathrm{additional}}$ is expected additional process time;
+\item $w_T$, $w_E$, and $w_t$ are user-defined weights.
+\end{itemize}
+
+The preferred action is therefore:
+
+\begin{equation}
+A^*
+\arg\max_{A\in\mathcal{A}} J(A)
+\end{equation}
+
+The optimisation is performed only over feasible operating actions.
+
+% =================================================
+\section{Action Ranking}
+% =================================================
+
+Rather than providing a single opaque recommendation, the POC produces a
+ranked list of candidate actions.
+
+An example output is:
+
+\begin{table}[H]
+\centering
+\caption{Illustrative action-ranking output.}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Action} &
+\textbf{Target Probability} &
+\textbf{Additional Energy} &
+\textbf{Additional Time} \
+\midrule
+Increase power & 0.84 & 0.32 MWh & 5 min \
+Increase O$_2$ & 0.79 & 0.35 MWh & 6 min \
+Maintain & 0.68 & 0.44 MWh & 8 min \
+Increase carbon & 0.72 & 0.40 MWh & 7 min \
+Prepare for tap & 0.41 & 0.20 MWh & 2 min \
+\bottomrule
+\end{tabular}
+\end{table}
+
+The values in this table are illustrative and will be replaced by model
+outputs during experimentation.
+
+The ranking provides the operator with alternatives rather than an automatic
+control instruction.
+
+% =================================================
+\section{Explainability}
+% =================================================
+
+Explainability is a central requirement of the POC.
+
+The system should provide not only the predicted action ranking but also the
+main process variables influencing the prediction.
+
+For example:
+
+\begin{quote}
+Increasing electrical power is ranked highly because the current temperature
+is below the target region and historical process behaviour indicates a high
+probability of reaching the target under increased electrical input.
+\end{quote}
+
+The model can therefore be interpreted through:
+
+\begin{itemize}
+\item current process state;
+\item candidate action;
+\item predicted outcome;
+\item probability of success;
+\item expected energy requirement;
+\item expected time requirement.
+\end{itemize}
+
+This creates a transparent chain:
+
+\begin{equation}
+\text{Current State}
+\rightarrow
+\text{Candidate Action}
+\rightarrow
+\text{Predicted Distribution}
+\rightarrow
+\text{Probability of Success}
+\rightarrow
+\text{Action Ranking}
+\end{equation}
+
+% =================================================
+\section{POC Architecture}
+% =================================================
+
+The complete POC architecture is:
+
+\begin{figure}[H]
+\centering
+\fbox{
+\begin{minipage}{0.85\textwidth}
+\centering
+
+EAF Historical Data
+
+$\downarrow$
+
+Data Cleaning and Feature Engineering
+
+$\downarrow$
+
+Current Heat-State Representation
+
+$\downarrow$
+
+Probabilistic Process Model
+
+$\downarrow$
+
+Generate Feasible Actions
+
+$\downarrow$
+
+Simulate Predicted Outcomes
+
+$\downarrow$
+
+Calculate Probability of Target Achievement
+
+$\downarrow$
+
+Calculate Energy and Time Cost
+
+$\downarrow$
+
+Rank Candidate Actions
+
+$\downarrow$
+
+Explainable Operator Decision Support
+
+\end{minipage}
+}
+\caption{Conceptual architecture of the proposed EAF decision-support POC.}
+\end{figure}
+
+% =================================================
+\section{Evaluation Methodology}
+% =================================================
+
+The POC should be evaluated using both predictive and decision-oriented
+metrics.
+
+\subsection{Predictive Performance}
+
+The probabilistic temperature model can be evaluated using:
+
+\begin{itemize}
+\item Mean Absolute Error (MAE);
+\item Root Mean Squared Error (RMSE);
+\item prediction interval coverage;
+\item calibration of predicted probabilities.
+\end{itemize}
+
+\subsection{Decision Performance}
+
+The decision-support component can be evaluated using:
+
+\begin{itemize}
+\item probability of achieving the target temperature;
+\item additional energy required;
+\item additional process time;
+\item frequency of target-condition violations;
+\item comparison with historical operator/process behaviour.
+\end{itemize}
+
+The purpose is not simply to minimise prediction error. The model should
+provide useful and calibrated information for selecting among feasible next
+actions.
+
+% =================================================
+\section{Data Leakage and Temporal Validation}
+% =================================================
+
+Because the proposed system is intended to support decisions during a heat,
+future information must not be used when constructing the current state.
+
+For example, final tap temperature, final energy consumption and final oxygen
+consumption must not be used as predictors for an earlier decision point.
+
+The dataset should therefore be divided temporally where possible, with
+earlier heats used for training and later heats used for validation/testing.
+
+This better represents the intended deployment scenario.
+
+% =================================================
+\section{Expected POC Output}
+% =================================================
+
+For a given heat, the final system should produce a compact decision-support
+summary such as:
+
+\begin{verbatim}
+EAF HEAT STATUS
+
+Current temperature: 1585 deg C
+Energy consumed: 2.45 MWh
+Heat duration: 38 min
+
+PREDICTED OUTCOME
+
+Target probability:
+Maintain power: 68%
+Increase power: 84%
+Increase O2: 79%
+
+ACTION RANKING
+
+Increase power
+
+Increase O2
+
+Increase carbon
+
+Maintain
+
+Prepare for tap
+
+PRIMARY REASON
+
+Current temperature remains below the target region.
+Increased electrical input produces the largest predicted
+increase in target-achievement probability.
+\end{verbatim}
+
+The actual ranking and values will be generated from the trained model and
+should not be manually specified.
+
+% =================================================
+\section{Innovation}
+% =================================================
+
+The innovation of this POC lies in combining three concepts:
+
+\begin{enumerate}
+\item \textbf{Probabilistic prediction} -- uncertainty is explicitly
+represented rather than hidden.
+
+\item \textbf{Action simulation} -- the model evaluates possible next
+operating actions rather than only predicting the final heat outcome.
+
+\item \textbf{Explainable ranking} -- the system provides an interpretable
+comparison of actions based on probability of success, energy and process
+time.
+
+\end{enumerate}
+
+The proposed approach therefore moves from:
+
+Prediction
+
+to:
+
+Prediction
++
+Uncertainty
++
+Action Evaluation
++
+Optimisation
+.
+
+% =================================================
+\section{Scope and Limitations}
+% =================================================
+
+The POC intentionally has a limited scope.
+
+The first version focuses on tap-temperature achievement and does not attempt
+to perform full EAF control or comprehensive steel-grade optimisation.
+
+The following limitations are recognised:
+
+\begin{itemize}
+\item The available dataset is primarily heat-level data.
+\item Some variables have substantial missingness.
+\item EAF chemistry measurements are not available for every heat.
+\item Historical data may not contain explicit operator actions at every
+decision point.
+\item The model represents statistical relationships and should not be
+interpreted as a complete physical EAF model.
+\end{itemize}
+
+These limitations motivate the use of a decision-support framework rather than
+an autonomous control system.
+
+% =================================================
+\section{Future Development}
+% =================================================
+
+The POC can subsequently be extended in several directions:
+
+\begin{enumerate}
+\item Incorporate high-frequency EAF time-series data.
+
+\item Construct real-time heat-state estimation.
+
+\item Include steel chemistry as an additional optimisation constraint.
+
+\item Extend the action space to continuous power, oxygen and carbon
+control.
+
+\item Incorporate physical and thermochemical constraints.
+
+\item Develop model-predictive control based on the probabilistic model.
+
+\item Compare the statistical model against physics-based and hybrid
+models.
+
+\end{enumerate}
+
+% =================================================
+\section{Conclusion}
+% =================================================
+
+This POC proposes a simple and explainable probabilistic approach to EAF
+process optimisation.
+
+The central problem is to determine which feasible operating action should be
+considered next given the current state of the heat.
+
+Rather than producing a single deterministic prediction, the model estimates
+the probability of achieving the desired tap condition under each candidate
+action. These actions are then evaluated using expected energy and process
+time and presented as a ranked set of alternatives.
+
+The resulting system is intended to support, rather than replace, the
+pyrometallurgy operator. Its principal contribution is the transformation of
+historical EAF process data into an interpretable probabilistic decision-support
+framework.
+
+The POC can therefore be summarised as:
+
+\begin{equation}
+\boxed{
+\text{Current EAF State}
+\rightarrow
+\text{Probabilistic Outcomes}
+\rightarrow
+\text{Action Evaluation}
+\rightarrow
+\text{Action Ranking}
+\rightarrow
+\text{Operator Decision}
+}
+\end{equation}
+
+\end{document}

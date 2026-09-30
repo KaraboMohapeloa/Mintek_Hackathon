@@ -1,0 +1,2 @@
+MAE,RMSE,Mean_Error,Median_Absolute_Error,P95_Absolute_Error,Maximum_Absolute_Error,R2,Observed_Mean,Predicted_Mean,Absolute_Error_Above_10_C,Absolute_Error_Above_20_C,Absolute_Error_Above_30_C,Absolute_Error_Above_50_C,Absolute_Error_Above_100_C
+10.341480767861789,13.39457163549706,3.4832461321071206,8.131024431664173,26.96696460059679,73.26351809555194,-0.03705762816991398,1653.8104386807556,1650.3271925486488,1305,419,88,3,0
